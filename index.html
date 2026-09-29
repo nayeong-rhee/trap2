@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>The &lt;Venus flytrap&gt;</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Noto Sans KR (깔끔한 고딕 폰트) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #f6f8f2;
+      font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    /* 게임 플레이 중에만 커서 숨김 */
+    body.is-playing {
+      cursor: none;
+    }
+    body:not(.is-playing) {
+      cursor: default;
+    }
+    /* 모달 및 상호작용 UI 영역에서는 커서 확실히 표시 */
+    #introModal, #endModal, .interactive-modal {
+      cursor: default !important;
+    }
+    button, [role="button"], a {
+      cursor: pointer !important;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    .hud-botanical {
+      background: rgba(255, 255, 255, 0.45);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.75);
+      box-shadow: 0 12px 36px rgba(110, 140, 80, 0.12);
+    }
+    .danger-glow {
+      box-shadow: 0 0 25px rgba(220, 50, 110, 0.75);
+    }
+    @keyframes pulseHeartbeat {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.03); }
+    }
+    .animate-heartbeat {
+      animation: pulseHeartbeat 0.7s infinite ease-in-out;
+    }
+
+    .emoji-img {
+
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  display: block;
+
+}
+  </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden bg-[#f6f8f2]">
+
+  <!-- Background Ambience & Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- In-Game Minimalist Botanical HUD -->
+  <div id="hud" class="pointer-events-none absolute inset-0 flex flex-col justify-between p-6 md:p-10 z-10 transition-opacity duration-700">
+    
+    <!-- Top Header -->
+    <div class="flex items-start justify-between w-full">
+      <div class="pointer-events-auto">
+        <div class="flex items-center space-x-2">
+          <span class="w-2 h-2 rounded-full bg-[#759846]"></span>
+          <h1 class="text-xs md:text-sm tracking-[0.2em] text-[#557335] uppercase font-semibold">2026 Motif Workshop</h1>
+        </div>
+        <h2 id="hudTitle" class="text-2xl md:text-3xl font-bold text-[#1f2a18] tracking-tight mt-0.5">The &lt;Venus flytrap&gt;</h2>
+        <p class="text-xs md:text-sm text-[#ce3f7e] italic font-medium tracking-wide">"발버둥 칠 수록 옥죈다."</p>
+      </div>
+
+      <!-- Controls -->
+      <div class="pointer-events-auto flex items-center space-x-3">
+        <button id="soundToggleBtn" class="hud-botanical px-4 py-1.5 rounded-full text-xs font-medium text-emerald-950 hover:bg-white/80 transition duration-300 shadow-sm border border-emerald-900/10">
+          🔊 음향 ON
+        </button>
+        <button id="guideBtn" class="hud-botanical w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-emerald-950 hover:bg-white/80 transition shadow-sm border border-emerald-900/10">
+          ?
+        </button>
+      </div>
+    </div>
+
+    <!-- Center Top: Survival Timer & Status -->
+    <div class="self-center flex flex-col items-center">
+      <div class="hud-botanical rounded-3xl px-8 py-3 flex items-center gap-8 shadow-md border border-white/80">
+        <!-- Timer -->
+        <div class="text-center">
+          <div class="text-[10px] tracking-[0.18em] uppercase font-semibold text-emerald-800/60">남은 생존 시간</div>
+          <div class="flex items-baseline justify-center">
+            <span id="timerText" class="text-3xl md:text-4xl font-bold font-mono text-[#24331a]">30.0</span>
+            <span class="text-xs text-emerald-700/70 ml-1">s</span>
+          </div>
+        </div>
+
+        <div class="h-9 w-[1px] bg-emerald-900/10"></div>
+
+        <!-- Score -->
+        <div class="text-center min-w-[70px]">
+          <div class="text-[10px] tracking-[0.18em] uppercase font-semibold text-emerald-800/60">생존 점수</div>
+          <div id="scoreText" class="text-2xl md:text-3xl font-bold font-mono text-[#385923]">0</div>
+        </div>
+
+        <div class="h-9 w-[1px] bg-emerald-900/10"></div>
+
+        <!-- Risk Multiplier -->
+        <div class="text-center min-w-[60px]">
+          <div class="text-[10px] tracking-[0.18em] uppercase font-semibold text-emerald-800/60">위험 배율</div>
+          <div id="multText" class="text-xl md:text-2xl font-bold font-mono text-[#d13a7c]">x1.0</div>
+        </div>
+      </div>
+      
+      <!-- Sticky Nectar warning message -->
+      <div id="stickinessWarning" class="opacity-0 transition-opacity duration-300 mt-2 text-xs font-semibold text-[#c82f6a] tracking-wide flex items-center gap-1.5 bg-rose-50/80 px-3 py-1 rounded-full border border-rose-200">
+        <span class="inline-block w-1.5 h-1.5 rounded-full bg-[#c82f6a] animate-ping"></span>
+        <span>끈적이는 꿀 향에 오염됨: 흡인력 2배 증가</span>
+      </div>
+    </div>
+
+    <!-- Bottom: Struggle & Panic Bar -->
+    <div class="w-full max-w-lg mx-auto flex flex-col items-center">
+      <div class="w-full flex justify-between items-center text-xs font-semibold px-2 mb-2">
+        <span class="text-emerald-900/80 flex items-center gap-2">
+          <span id="panicDot" class="inline-block w-2.5 h-2.5 rounded-full bg-[#d6408d]"></span>
+          <span>발버둥 계수 (Struggle / Kinetic Panic)</span>
+        </span>
+        <span id="panicPercentText" class="font-mono text-[#d6408d] text-sm font-bold">0%</span>
+      </div>
+      <div class="w-full h-3.5 rounded-full bg-emerald-950/10 p-0.5 hud-botanical overflow-hidden relative shadow-inner">
+        <div id="panicProgressBar" class="h-full rounded-full transition-all duration-75 bg-gradient-to-r from-[#83b836] via-[#e5b72e] to-[#dc2e7e]" style="width: 0%;"></div>
+      </div>
+      <div class="text-[11px] text-emerald-800/70 italic mt-2 text-center">
+        * 마우스를 급하게 흔들면 흡인력이 기하급수적으로 폭증합니다. 냄새 입자 틈새를 <b>극도로 미세하고 느리게</b> 유영하세요.
+      </div>
+    </div>
+  </div>
+
+  <!-- Intro Modal -->
+  <div id="introModal" class="interactive-modal absolute inset-0 z-30 flex items-center justify-center bg-emerald-950/35 backdrop-blur-md p-4">
+    <div class="hud-botanical max-w-xl w-full rounded-3xl p-7 md:p-9 bg-white/95 shadow-2xl text-center border border-white">
+      
+      <h2 class="text-3xl md:text-4xl font-extrabold text-gray-900 mb-2">The &lt;Venus flytrap&gt;</h2>
+      <p class="text-sm font-semibold text-[#c83273] mb-6">게임 방법</p>
+
+      <div class="text-left text-sm text-gray-700 space-y-3.5 mb-7 bg-[#f6f9f0]/90 p-5 rounded-2xl border border-emerald-900/10">
+        <p class="flex items-start gap-3">
+          <span class="text-lg"> <img src="fly.png" class="emoji-img"></span>
+          <span><b>1.</b> 파리지옥의 냄새 입자 때문에 파리가 파리지옥 쪽으로 끌려간다.</span>
+        </p>
+        <p class="flex items-start gap-3">
+          <span class="text-lg">🌪️</span>
+          <span><b>2.</b> 도망치려고 발버둥 칠 수록 흡인력이 강해진다. 하지만 <b>획득 점수  
+          배율도 높아진다.</b></span>
+        </p>
+        <p class="flex items-start gap-3">
+          <span class="text-lg">🌸</span>
+          <span><b>3.</b> 파리에 다가오는 냄새 입자를 <b>천천히</b> 피해다니며 먹이를 먹는다. <b>입자에 닿는 순간 즉시 사망한다.</b></span>
+        </p>
+        <p class="flex items-start gap-3">
+          <span class="text-lg">🍯</span>
+          <span><b>4.</b> 파리지옥에 갇히지 않고 30초 동안 버티면 생존에 성공한다.</span>
+        </p>
+      </div>
+
+      <button id="startGameBtn" class="pointer-events-auto w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#628a2a] via-[#85a639] to-[#ce3f7e] text-white text-base font-bold shadow-xl hover:shadow-2xl hover:opacity-95 transition transform hover:-translate-y-0.5 active:translate-y-0">
+        시작하기
+      </button>
+    </div>
+  </div>
+
+  <!-- Game Over / Victory Modal -->
+  <div id="endModal" class="interactive-modal absolute inset-0 z-40 hidden flex items-center justify-center bg-black/60 backdrop-blur-md p-4 transition-opacity">
+    <div class="hud-botanical max-w-md w-full rounded-3xl p-7 md:p-9 bg-white/95 shadow-2xl text-center border border-white">
+      <div id="endBadge" class="inline-block px-3.5 py-1 rounded-full text-xs font-bold mb-3 bg-[#c83273]/15 text-[#be2667]">
+        TRAPPED
+      </div>
+      <h2 id="endTitle" class="text-2xl md:text-3xl font-extrabold text-gray-900 mb-2">포충낭에 포식되었습니다</h2>
+      <p id="endDesc" class="text-sm text-gray-600 mb-6 leading-relaxed font-normal">
+        발버둥은 단지 덫의 감각모를 자극해 턱을 더 잔인하게 닫히게 할 뿐이었습니다.
+      </p>
+
+      <div class="grid grid-cols-2 gap-3.5 mb-7 bg-emerald-50/70 p-4 rounded-2xl border border-emerald-900/10">
+        <div class="text-left">
+          <div class="text-[11px] text-emerald-800/60 font-bold uppercase tracking-wider">생존 시간</div>
+          <div id="endSurvivedTime" class="text-2xl font-bold font-mono text-gray-800">12.4s</div>
+        </div>
+        <div class="text-left">
+          <div class="text-[11px] text-emerald-800/60 font-bold uppercase tracking-wider">최종 점수</div>
+          <div id="endFinalScore" class="text-2xl font-bold font-mono text-[#436b28]">2,850</div>
+        </div>
+      </div>
+
+      <button id="restartBtn" class="pointer-events-auto w-full py-3.5 px-6 rounded-2xl bg-[#28381c] text-white font-bold shadow-lg hover:bg-black transition transform hover:-translate-y-0.5 active:translate-y-0">
+        다시 비행하기 (Try Again)
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // Organic Synthesized Sound Engine with Heartbeat & Visceral Crunch
+    class OrganicSoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+        this.heartbeatTimer = null;
+        this.heartbeatRate = 1200; // ms
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playHum() {
+        if (!this.enabled || !this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(180 + Math.random() * 30, this.ctx.currentTime);
+          gain.gain.setValueAtTime(0.012, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.08);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.08);
+        } catch(e) {}
+      }
+
+      playHeartbeat(rateNorm) {
+        if (!this.enabled || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          // Lub-dub acoustic thump
+          const osc1 = this.ctx.createOscillator();
+          const gain1 = this.ctx.createGain();
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(65, now);
+          osc1.frequency.exponentialRampToValueAtTime(35, now + 0.12);
+          gain1.gain.setValueAtTime(0.18 + rateNorm * 0.15, now);
+          gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+          osc1.connect(gain1);
+          gain1.connect(this.ctx.destination);
+          osc1.start(now);
+          osc1.stop(now + 0.15);
+
+          // Dub
+          const osc2 = this.ctx.createOscillator();
+          const gain2 = this.ctx.createGain();
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(55, now + 0.14);
+          osc2.frequency.exponentialRampToValueAtTime(28, now + 0.28);
+          gain2.gain.setValueAtTime(0.12 + rateNorm * 0.12, now + 0.14);
+          gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+          osc2.connect(gain2);
+          gain2.connect(this.ctx.destination);
+          osc2.start(now + 0.14);
+          osc2.stop(now + 0.3);
+        } catch(e) {}
+      }
+
+      playNectarChime() {
+        if (!this.enabled || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          const freqs = [659.25, 880, 1046.5];
+          freqs.forEach((f, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(f, now + idx * 0.05);
+            gain.gain.setValueAtTime(0.09, now + idx * 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.05 + 0.35);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + idx * 0.05);
+            osc.stop(now + idx * 0.05 + 0.35);
+          });
+        } catch(e) {}
+      }
+
+      playTrapSnapCrunch() {
+        if (!this.enabled || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          // Resonant heavy clamp slam
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(280, now);
+          osc.frequency.exponentialRampToValueAtTime(30, now + 0.45);
+          gain.gain.setValueAtTime(0.65, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.55);
+
+          // Organic crunch noise buffer
+          const bufferSize = this.ctx.sampleRate * 0.25;
+          const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+          const output = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            output[i] = Math.random() * 2 - 1;
+          }
+          const whiteNoise = this.ctx.createBufferSource();
+          whiteNoise.buffer = noiseBuffer;
+          const noiseGain = this.ctx.createGain();
+          noiseGain.gain.setValueAtTime(0.35, now);
+          noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+          whiteNoise.connect(noiseGain);
+          noiseGain.connect(this.ctx.destination);
+          whiteNoise.start(now);
+          whiteNoise.stop(now + 0.25);
+        } catch(e) {}
+      }
+
+      playVictorySong() {
+        if (!this.enabled || !this.ctx) return;
+        try {
+          const chord = [523.25, 659.25, 783.99, 1046.5];
+          chord.forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            const t = this.ctx.currentTime + idx * 0.1;
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.12, t);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.6);
+          });
+        } catch(e) {}
+      }
+    }
+
+    const sound = new OrganicSoundEngine();
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let width = 0;
+    let height = 0;
+
+    function resizeCanvas() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width * window.devicePixelRatio;
+      canvas.height = height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    let gameState = 'INTRO'; // 'INTRO', 'PLAYING', 'VICTORY', 'GAMEOVER'
+    let remainingTime = 30.0;
+    let totalElapsed = 0;
+    let score = 0;
+    let scoreMultiplier = 1.0;
+    let panicMeter = 0; // 0 to 100
+    let jawClampingProgress = 0; // 0 (open) to 1.0 (fully locked shut)
+    let screenShake = 0;
+    let stickyHoneyTime = 0; // Debuff duration from hitting scent particles
+
+    // Realistic Micro Fly (Player)
+    const fly = {
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      lastX: 0,
+      lastY: 0,
+      angle: 0,
+      wingPhase: 0,
+      radius: 11
+    };
+
+    // Kinetic Mouse tracking
+    const mouse = {
+      x: window.innerWidth / 2,
+      y: window.innerHeight * 0.85,
+      prevX: window.innerWidth / 2,
+      prevY: window.innerHeight * 0.85,
+      speed: 0,
+      accel: 0,
+      prevSpeed: 0,
+      smoothSpeed: 0
+    };
+
+    // Botanical atmospheric particles (Misty pollen & sunbeam dust)
+    const ambientSpores = [];
+    for (let i = 0; i < 45; i++) {
+      ambientSpores.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        r: 1 + Math.random() * 2.5,
+        driftX: (Math.random() - 0.5) * 0.4,
+        driftY: -0.2 - Math.random() * 0.4,
+        alpha: 0.2 + Math.random() * 0.5,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+
+    // Realistic watercolor background traps
+    const bgTraps = [];
+    function generateBgTraps() {
+      bgTraps.length = 0;
+      const count = Math.max(12, Math.floor(width / 110));
+      for (let i = 0; i < count; i++) {
+        bgTraps.push({
+          x: (i / (count - 1)) * (width + 120) - 60 + (Math.random() * 40 - 20),
+          y: height * 0.45 + Math.random() * (height * 0.5),
+          stemHeight: 180 + Math.random() * 300,
+          scale: 0.65 + Math.random() * 0.6,
+          tilt: (Math.random() - 0.5) * 0.5,
+          greenHue: 90 + Math.random() * 25,
+          blushIntensity: 0.15 + Math.random() * 0.35,
+          lobeOpenness: 0.4 + Math.random() * 0.4
+        });
+      }
+    }
+    generateBgTraps();
+
+    // Scent Rings (Concentrated Donut Fragrance Particles)
+    const scentParticles = [];
+    const BASE_SCENT_COUNT = 5; // Reduced from 9 for fair, balanced density
+
+    class ScentParticle {
+      constructor(spreadAcrossScreen = false) {
+        this.reset(spreadAcrossScreen);
+      }
+
+      reset(spread = false) {
+        const cx = width / 2;
+        const cy = height * 0.42;
+
+        if (spread) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = 120 + Math.random() * (Math.min(width, height) * 0.45);
+          this.x = cx + Math.cos(angle) * dist;
+          this.y = cy + Math.sin(angle) * dist;
+        } else {
+          // Emitted from the lush central trap's glandular nectar rim
+          const emitAngle = Math.random() * Math.PI * 2;
+          this.x = cx + Math.cos(emitAngle) * (70 + Math.random() * 50);
+          this.y = cy + Math.sin(emitAngle) * (40 + Math.random() * 30);
+        }
+
+        this.vx = (Math.random() - 0.5) * 1.0;
+        this.vy = (Math.random() - 0.5) * 1.0;
+        this.baseRadius = 14 + Math.random() * 9;
+        this.pulse = Math.random() * Math.PI * 2;
+        this.pulseSpeed = 0.035 + Math.random() * 0.025;
+        this.homingSpeed = 0.016 + Math.random() * 0.022; // Gentler, readable pursuit curve
+        this.vaporTrail = [];
+
+        // Generous initial distance from the player
+        if (Math.hypot(this.x - fly.x, this.y - fly.y) < 180) {
+          this.y -= 220;
+        }
+      }
+
+      update() {
+        this.pulse += this.pulseSpeed;
+
+        // "파리가 많이 움직이면 더 어려워짐"
+        // 패닉 계수 및 마우스 활동량에 비례해 추적 속도와 민첩성이 급증
+        const panicRatio = panicMeter / 100;
+        const speedMultiplier = 1.0 + panicRatio * 2.2; // 최대 3.2배 공격적 가속
+
+        const dx = fly.x - this.x;
+        const dy = fly.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 10) {
+          const effectiveHoming = this.homingSpeed * speedMultiplier;
+          this.vx += (dx / dist) * effectiveHoming;
+          this.vy += (dy / dist) * effectiveHoming;
+        }
+
+        // 덫 중심부 소용돌이 기류 영향
+        const cx = width / 2;
+        const cy = height * 0.42;
+        const tdx = cx - this.x;
+        const tdy = cy - this.y;
+        const tDist = Math.hypot(tdx, tdy);
+        if (tDist > 50) {
+          this.vx += (-tdy / tDist) * (0.03 * speedMultiplier);
+          this.vy += (tdx / tDist) * (0.03 * speedMultiplier);
+        }
+
+        // 감쇠 및 최대 속도 제한
+        this.vx *= 0.972;
+        this.vy *= 0.972;
+
+        const currentSpeed = Math.hypot(this.vx, this.vy);
+        const maxSpeed = 2.4 + (panicRatio * 3.2); // 발버둥 시 입자 최고 속도가 5.6까지 폭증
+        if (currentSpeed > maxSpeed) {
+          this.vx = (this.vx / currentSpeed) * maxSpeed;
+          this.vy = (this.vy / currentSpeed) * maxSpeed;
+        }
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Keep vapor history
+        if (Math.random() < 0.4) {
+          this.vaporTrail.push({ x: this.x, y: this.y, life: 1.0 });
+          if (this.vaporTrail.length > 7) this.vaporTrail.shift();
+        }
+        for (let i = 0; i < this.vaporTrail.length; i++) {
+          this.vaporTrail[i].life -= 0.04;
+        }
+        this.vaporTrail = this.vaporTrail.filter(t => t.life > 0);
+
+        // Respawn if blown far away
+        if (this.x < -90 || this.x > width + 90 || this.y < -90 || this.y > height + 90) {
+          this.reset(false);
+        }
+      }
+
+      draw() {
+        ctx.save();
+
+        // Delicate vapor trail
+        this.vaporTrail.forEach(t => {
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, this.baseRadius * 0.5 * t.life, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(180, 220, 80, ${0.12 * t.life})`;
+          ctx.fill();
+        });
+
+        ctx.translate(this.x, this.y);
+        const r = this.baseRadius + Math.sin(this.pulse) * 2.5;
+
+        // 1. Chartreuse outer soft halo
+        const outerGrad = ctx.createRadialGradient(0, 0, r * 0.7, 0, 0, r + 7);
+        outerGrad.addColorStop(0, 'rgba(152, 204, 52, 0.45)');
+        outerGrad.addColorStop(1, 'rgba(152, 204, 52, 0)');
+        ctx.fillStyle = outerGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r + 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. Concentric ring: Pure spring green ring
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(130, 192, 38, 0.95)';
+        ctx.fill();
+
+        // 3. Concentric ring: Pale cream-yellow luminous middle band
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(248, 255, 175, 0.98)';
+        ctx.fill();
+
+        // 4. Concentric ring: Deep blushing magenta-pink seductive core
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.42, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(235, 68, 150, 0.95)';
+        ctx.fill();
+
+        // Specular glistening dew point
+        ctx.beginPath();
+        ctx.arc(-r * 0.14, -r * 0.14, r * 0.14, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    class NectarDroplet {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = 90 + Math.random() * (width - 180);
+        this.y = 90 + Math.random() * (height - 180);
+        const cy = height * 0.42;
+        // Keep clear of initial center death zone
+        if (Math.hypot(this.x - width / 2, this.y - cy) < 150) {
+          this.y += 190;
+        }
+        this.vx = (Math.random() - 0.5) * 1.5;
+        this.vy = (Math.random() - 0.5) * 1.5;
+        this.radius = 12;
+        this.shimmer = Math.random() * Math.PI * 2;
+      }
+      update() {
+        this.shimmer += 0.06;
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < 60 || this.x > width - 60) this.vx *= -1;
+        if (this.y < 60 || this.y > height - 60) this.vy *= -1;
+      }
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+
+        // Radiant golden aura
+        const aura = 18 + Math.sin(this.shimmer) * 4;
+        const g = ctx.createRadialGradient(0, 0, 3, 0, 0, aura);
+        g.addColorStop(0, 'rgba(255, 235, 90, 0.95)');
+        g.addColorStop(0.5, 'rgba(255, 170, 20, 0.55)');
+        g.addColorStop(1, 'rgba(255, 170, 20, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, 0, aura, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Droplet body
+        ctx.beginPath();
+        ctx.arc(0, 0, 9, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffb300';
+        ctx.fill();
+
+        // Translucent highlight
+        ctx.beginPath();
+        ctx.arc(-2.8, -2.8, 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    const nectars = [new NectarDroplet(), new NectarDroplet()];
+    let nectarSpawnCooldown = 0;
+    let invulnerabilityTimer = 0; // Brief grace period after collecting nectar
+
+    function drawBotanicalBackground() {
+      // 1. Soft sunlight mist wash
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+      bgGrad.addColorStop(0, '#f9fcf5');
+      bgGrad.addColorStop(0.5, '#f5f8ed');
+      bgGrad.addColorStop(1, '#ecf4e4');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // Sunbeams / Caustic greenhouse light rays
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 4; i++) {
+        const xOffset = (width * 0.25) * i + Math.sin(totalElapsed * 0.4 + i) * 30;
+        const beamGrad = ctx.createLinearGradient(xOffset, 0, xOffset + 120, height);
+        beamGrad.addColorStop(0, 'rgba(255, 255, 235, 0.16)');
+        beamGrad.addColorStop(1, 'rgba(240, 255, 210, 0.01)');
+        ctx.fillStyle = beamGrad;
+        ctx.beginPath();
+        ctx.moveTo(xOffset, 0);
+        ctx.lineTo(xOffset + 90, 0);
+        ctx.lineTo(xOffset + 240, height);
+        ctx.lineTo(xOffset + 60, height);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Atmospheric floating botanical spores & pollen
+      ambientSpores.forEach(s => {
+        s.y += s.driftY;
+        s.x += s.driftX + Math.sin(totalElapsed + s.phase) * 0.3;
+        if (s.y < -10) s.y = height + 10;
+        if (s.x < -10) s.x = width + 10;
+        if (s.x > width + 10) s.x = -10;
+
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(180, 215, 140, ${s.alpha * 0.5})`;
+        ctx.fill();
+      });
+
+      // Background Venus flytrap silhouettes
+      bgTraps.forEach(trap => {
+        ctx.save();
+        ctx.translate(trap.x, trap.y);
+        ctx.rotate(trap.tilt);
+        ctx.scale(trap.scale, trap.scale);
+
+        // Translucent slender stalk
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(trap.tilt * 90, trap.stemHeight * 0.5, 0, trap.stemHeight);
+        ctx.strokeStyle = `rgba(160, 195, 130, 0.35)`;
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+
+        // Lobed clam pod
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 52, 40, 0, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(244, 252, 238, 0.85)`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(145, 190, 120, 0.55)`;
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+
+        // Inner blushing watercolor flush
+        ctx.beginPath();
+        ctx.ellipse(0, 4, 34, 25, 0, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(235, 120, 175, ${trap.blushIntensity})`;
+        ctx.fill();
+
+        // Delicate marginal teeth / spines
+        for (let i = -6; i <= 6; i++) {
+          const tAngle = (i / 6) * (Math.PI * 0.72) - Math.PI / 2;
+          const x1 = Math.cos(tAngle) * 52;
+          const y1 = Math.sin(tAngle) * 40;
+          const x2 = Math.cos(tAngle) * 72;
+          const y2 = Math.sin(tAngle) * 56;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.strokeStyle = `rgba(140, 185, 115, 0.65)`;
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      });
+    }
+
+    function drawRealisticCenterTrap(cx, cy) {
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      const breathing = Math.sin(totalElapsed * 2.2) * 6;
+      const trapW = Math.min(width * 0.68, 560) + breathing;
+      const trapH = 240 + breathing * 0.6;
+
+      // 1. Watercolor bloom diffuse base
+      const diffuseGrad = ctx.createRadialGradient(0, 0, 40, 0, 0, trapW * 0.65);
+      diffuseGrad.addColorStop(0, 'rgba(195, 230, 75, 0.85)');
+      diffuseGrad.addColorStop(0.5, 'rgba(165, 210, 55, 0.45)');
+      diffuseGrad.addColorStop(1, 'rgba(150, 200, 45, 0)');
+      ctx.fillStyle = diffuseGrad;
+
+      // Jagged botanical watercolor splash perimeter
+      ctx.beginPath();
+      const numPoints = 20;
+      for (let i = 0; i <= numPoints; i++) {
+        const theta = (i / numPoints) * Math.PI * 2;
+        const spike = (i % 2 === 0 ? 1.18 : 0.88) + Math.sin(i * 3 + totalElapsed * 2) * 0.06;
+        const rx = (trapW * 0.54) * spike;
+        const ry = (trapH * 0.48) * spike;
+        const px = Math.cos(theta) * rx;
+        const py = Math.sin(theta) * ry;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // 2. Translucent yellow-lime flesh gradient
+      const fleshGrad = ctx.createRadialGradient(0, 0, 20, 0, 0, trapW * 0.45);
+      fleshGrad.addColorStop(0, 'rgba(255, 240, 130, 0.95)');
+      fleshGrad.addColorStop(0.65, 'rgba(235, 220, 85, 0.5)');
+      fleshGrad.addColorStop(1, 'rgba(210, 210, 60, 0)');
+      ctx.fillStyle = fleshGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, trapW * 0.46, trapH * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 3. Realistic botanical trigger hairs (trichomes)
+      ctx.strokeStyle = 'rgba(120, 160, 60, 0.6)';
+      ctx.lineWidth = 1.5;
+      const hairCoords = [
+        [-50, -20], [0, -35], [50, -20],
+        [-50, 20], [0, 35], [50, 20]
+      ];
+      hairCoords.forEach(([hx, hy]) => {
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(hx + 8, hy - 14);
+        ctx.stroke();
+        // Hair trigger tip
+        ctx.beginPath();
+        ctx.arc(hx + 8, hy - 14, 1.8, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff7bb8';
+        ctx.fill();
+      });
+
+      // 4. Central deep pink-magenta digestive nectar pool
+      const poolGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, trapW * 0.35);
+      poolGrad.addColorStop(0, 'rgba(245, 50, 140, 0.98)');
+      poolGrad.addColorStop(0.45, 'rgba(230, 70, 150, 0.85)');
+      poolGrad.addColorStop(1, 'rgba(215, 60, 140, 0)');
+      ctx.fillStyle = poolGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, trapW * 0.38, trapH * 0.24, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 5. Inward pulling biological suction whirlpool ripples
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 1.5;
+      const vortexSpeed = 2.0 + (panicMeter / 100) * 4.0;
+      for (let j = 0; j < 8; j++) {
+        const rot = totalElapsed * vortexSpeed + (j * Math.PI) / 4;
+        const rIn = 20 + Math.sin(totalElapsed * 5 + j) * 8;
+        const rOut = trapW * 0.32;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(rot) * rOut, Math.sin(rot) * rOut * 0.5);
+        ctx.quadraticCurveTo(
+          Math.cos(rot + 0.35) * (rOut * 0.5),
+          Math.sin(rot + 0.35) * (rOut * 0.25),
+          Math.cos(rot + 0.7) * rIn,
+          Math.sin(rot + 0.7) * rIn * 0.38
+        );
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawFly() {
+      ctx.save();
+      ctx.translate(fly.x, fly.y);
+      ctx.rotate(fly.angle);
+
+      // High-speed wing oscillation
+      const flutter = Math.sin(fly.wingPhase) * 0.7;
+
+      // Soft ground shadow
+      ctx.beginPath();
+      ctx.ellipse(3, 4, fly.radius * 0.9, fly.radius * 0.7, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(30, 45, 20, 0.15)';
+      ctx.fill();
+
+      // Iridescent sky-blue wings (Dual layered)
+      ctx.save();
+      // Left Wing
+      ctx.translate(-fly.radius * 0.4, 0);
+      ctx.rotate(-Math.PI * 0.45 + flutter);
+      ctx.beginPath();
+      ctx.ellipse(0, -16, 7, 18, 0.12, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(195, 230, 255, 0.88)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(145, 200, 245, 0.95)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      // Fine wing venation
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -32);
+      ctx.moveTo(0, -16);
+      ctx.lineTo(4, -24);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+
+      // Right Wing
+      ctx.save();
+      ctx.translate(fly.radius * 0.4, 0);
+      ctx.rotate(Math.PI * 0.45 - flutter);
+      ctx.beginPath();
+      ctx.ellipse(0, -16, 7, 18, -0.12, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(195, 230, 255, 0.88)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(145, 200, 245, 0.95)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      // Wing venation
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -32);
+      ctx.moveTo(0, -16);
+      ctx.lineTo(-4, -24);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+
+      // Minimalist organic fly body (Thorax and Abdomen)
+      // Abdomen
+      ctx.beginPath();
+      ctx.ellipse(0, 4, fly.radius * 0.85, fly.radius * 1.05, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#1c1f19';
+      ctx.fill();
+
+      // Thorax & Head
+      ctx.beginPath();
+      ctx.arc(0, -5, fly.radius * 0.75, 0, Math.PI * 2);
+      ctx.fillStyle = '#2b3026';
+      ctx.fill();
+
+      // Tiny compound eyes (dark ruby red)
+      ctx.beginPath();
+      ctx.arc(-4, -8, 2.5, 0, Math.PI * 2);
+      ctx.arc(4, -8, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#7a1f2b';
+      ctx.fill();
+
+      // Highlights
+      ctx.beginPath();
+      ctx.arc(-2, -5, 2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.fill();
+
+      // If contaminated with sticky honey
+      if (stickyHoneyTime > 0) {
+        ctx.beginPath();
+        ctx.arc(0, 0, fly.radius + 5, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 175, 20, 0.8)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawFullScreenJawSnapCinematic(progress) {
+      if (progress <= 0) return;
+
+      ctx.save();
+      // Total screen height span
+      const teethCount = Math.max(14, Math.floor(width / 75));
+      const toothWidth = width / teethCount;
+      const jawTravel = (1.0 - progress) * (height * 0.55);
+
+      // Top Botanical Jaw
+      const topJawY = -jawTravel;
+      ctx.fillStyle = '#4c7329';
+      ctx.fillRect(0, topJawY - 120, width, height * 0.5 + 120);
+
+      // Gradient shading on top jaw body
+      const topGrad = ctx.createLinearGradient(0, topJawY + height * 0.45 - 150, 0, topJawY + height * 0.48);
+      topGrad.addColorStop(0, '#5a8731');
+      topGrad.addColorStop(0.7, '#8cb844');
+      topGrad.addColorStop(1, '#db5792');
+      ctx.fillStyle = topGrad;
+      ctx.fillRect(0, topJawY + height * 0.35, width, height * 0.15);
+
+      // Massive curved interlocking spiky cilia (Top Teeth)
+      for (let i = 0; i < teethCount; i++) {
+        const tx = i * toothWidth;
+        const toothPeakY = topJawY + height * 0.5 + 95;
+        ctx.beginPath();
+        ctx.moveTo(tx, topJawY + height * 0.5 - 2);
+        ctx.quadraticCurveTo(tx + toothWidth * 0.4, toothPeakY - 20, tx + toothWidth * 0.5, toothPeakY);
+        ctx.quadraticCurveTo(tx + toothWidth * 0.6, toothPeakY - 20, tx + toothWidth, topJawY + height * 0.5 - 2);
+        ctx.closePath();
+        ctx.fillStyle = i % 2 === 0 ? '#679c35' : '#88bc48';
+        ctx.fill();
+        ctx.strokeStyle = '#294314';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+
+      // Bottom Botanical Jaw
+      const bottomJawY = height + jawTravel;
+      ctx.fillStyle = '#4c7329';
+      ctx.fillRect(0, bottomJawY - height * 0.5, width, height * 0.5 + 120);
+
+      const bottomGrad = ctx.createLinearGradient(0, bottomJawY - height * 0.48, 0, bottomJawY - height * 0.35);
+      bottomGrad.addColorStop(0, '#db5792');
+      bottomGrad.addColorStop(0.3, '#8cb844');
+      bottomGrad.addColorStop(1, '#5a8731');
+      ctx.fillStyle = bottomGrad;
+      ctx.fillRect(0, bottomJawY - height * 0.5, width, height * 0.15);
+
+      // Interlocking Bottom Teeth (Offset to slot between top teeth)
+      for (let i = 0; i < teethCount; i++) {
+        const tx = i * toothWidth;
+        const toothPeakY = bottomJawY - height * 0.5 - 95;
+        ctx.beginPath();
+        ctx.moveTo(tx, bottomJawY - height * 0.5 + 2);
+        ctx.quadraticCurveTo(tx + toothWidth * 0.4, toothPeakY + 20, tx + toothWidth * 0.5, toothPeakY);
+        ctx.quadraticCurveTo(tx + toothWidth * 0.6, toothPeakY + 20, tx + toothWidth, bottomJawY - height * 0.5 + 2);
+        ctx.closePath();
+        ctx.fillStyle = i % 2 === 0 ? '#88bc48' : '#679c35';
+        ctx.fill();
+        ctx.strokeStyle = '#294314';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+
+      // Darkness / Crimson digestive fluid fog when jaws seal shut
+      if (progress > 0.7) {
+        const alpha = Math.min(0.92, (progress - 0.7) * 3.3);
+        ctx.fillStyle = `rgba(18, 5, 10, ${alpha})`;
+        ctx.fillRect(0, 0, width, height);
+
+        // Visceral glowing red digestive enzymes through the seam
+        ctx.beginPath();
+        ctx.ellipse(width / 2, height / 2, width * 0.4, 30, 0, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(230, 30, 95, ${alpha * 0.65})`;
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function trackPointer(clientX, clientY) {
+      sound.init();
+      const dx = clientX - mouse.prevX;
+      const dy = clientY - mouse.prevY;
+      const rawSpeed = Math.hypot(dx, dy);
+
+      // Instantaneous speed & acceleration
+      mouse.accel = Math.abs(rawSpeed - mouse.prevSpeed);
+      mouse.prevSpeed = rawSpeed;
+      mouse.speed = rawSpeed;
+
+      mouse.x = clientX;
+      mouse.y = clientY;
+      mouse.prevX = clientX;
+      mouse.prevY = clientY;
+    }
+
+    window.addEventListener('mousemove', (e) => trackPointer(e.clientX, e.clientY));
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 0) trackPointer(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    // Initialize scent particles
+    for (let i = 0; i < BASE_SCENT_COUNT; i++) {
+      scentParticles.push(new ScentParticle(true));
+    }
+
+    let lastTimestamp = performance.now();
+    let heartbeatTick = 0;
+
+    function update(dt) {
+      if (gameState !== 'PLAYING') return;
+
+      // Invulnerability / calm grace timer decay
+      if (invulnerabilityTimer > 0) {
+        invulnerabilityTimer = Math.max(0, invulnerabilityTimer - dt);
+      }
+
+      // 30s timer (runs slightly expedited ~15% for moderate suspense)
+      const timerSpeed = 1.15;
+      remainingTime = Math.max(0, remainingTime - dt * timerSpeed);
+      totalElapsed += dt;
+
+      // Gradual, manageable particle progression (from 5 up to ~9 total)
+      const targetParticleCount = BASE_SCENT_COUNT + Math.floor((30 - remainingTime) / 6.0);
+      while (scentParticles.length < targetParticleCount) {
+        scentParticles.push(new ScentParticle(false));
+      }
+
+      // Smooth mouse speed & struggle kinetic calculation
+      mouse.smoothSpeed = mouse.smoothSpeed * 0.8 + mouse.speed * 0.2;
+      mouse.speed *= 0.7;
+
+      // "파리가 많이 움직이면 더 어려워져야 함"
+      // 움직임 감지 임계값을 민감하게(5.2) 낮추고, 이동량에 비례해 패닉 급상승
+      const movementIntensity = Math.max(0, mouse.smoothSpeed - 5.2) + (mouse.accel * 0.12);
+      if (movementIntensity > 0) {
+        panicMeter = Math.min(100, panicMeter + movementIntensity * 2.8 * dt * 60);
+      } else {
+        // 정지/극저속 상태일 때만 서서히 안정화
+        panicMeter = Math.max(0, panicMeter - 24 * dt);
+      }
+
+      // Sticky scent debuff timer decay
+      if (stickyHoneyTime > 0) {
+        stickyHoneyTime = Math.max(0, stickyHoneyTime - dt);
+      }
+
+      // Risk-Reward Multiplier: Panic multiplies score reward up to x5.0
+      scoreMultiplier = 1.0 + (panicMeter / 100) * 4.0;
+      score += Math.floor((20 * scoreMultiplier) * dt * 60);
+
+      // Center Trap Attraction Physics: 발버둥 칠수록 흡인력이 기하급수적으로 폭증
+      const cx = width / 2;
+      const cy = height * 0.42;
+      const toTrapX = cx - fly.x;
+      const toTrapY = cy - fly.y;
+      const distToTrap = Math.hypot(toTrapX, toTrapY);
+
+      const panicPull = 1.0 + Math.pow(panicMeter / 100, 2.0) * 5.2; // 움직임 폭증 시 최대 6.2배 흡인
+      const stickyMultiplier = (stickyHoneyTime > 0) ? 1.7 : 1.0;
+      const baseSuction = 1.9 * panicPull * stickyMultiplier;
+
+      const normX = toTrapX / (distToTrap || 1);
+      const normY = toTrapY / (distToTrap || 1);
+
+      // Swirling aerodynamic vortex pull: 패닉 시 조작 불능 수준의 와류 발생
+      const swirlForce = (panicMeter / 100) * 2.8;
+      const perpX = -normY * swirlForce;
+      const perpY = normX * swirlForce;
+
+      // Fly follows player's pointer with responsive steerability
+      const flyFollowWeight = (stickyHoneyTime > 0) ? 0.08 : 0.13;
+      fly.x += (mouse.x - fly.x) * flyFollowWeight + (normX * baseSuction) + perpX;
+      fly.y += (mouse.y - fly.y) * flyFollowWeight + (normY * baseSuction) + perpY;
+
+      // Fly facing direction
+      const fdx = fly.x - (fly.lastX || fly.x);
+      const fdy = fly.y - (fly.lastY || fly.y);
+      if (Math.hypot(fdx, fdy) > 0.4) {
+        fly.angle = Math.atan2(fdy, fdx) + Math.PI / 2;
+      }
+      fly.lastX = fly.x;
+      fly.lastY = fly.y;
+      fly.wingPhase += 0.55 + (panicMeter / 100) * 0.45;
+
+      // Occasional faint buzzing
+      if (Math.random() < 0.12) sound.playHum();
+
+      // Audio Heartbeat that accelerates as Panic climbs or Time runs out
+      heartbeatTick += dt;
+      const urgency = Math.max(panicMeter / 100, (30 - remainingTime) / 30);
+      const heartInterval = Math.max(0.38, 1.15 - urgency * 0.75);
+      if (heartbeatTick > heartInterval) {
+        sound.playHeartbeat(urgency);
+        heartbeatTick = 0;
+      }
+
+      // Scent particle collision check
+      for (let i = 0; i < scentParticles.length; i++) {
+        const p = scentParticles[i];
+        p.update();
+        const dist = Math.hypot(p.x - fly.x, p.y - fly.y);
+        const currentRadius = p.baseRadius + Math.sin(p.pulse) * 2.5;
+
+        // Fair hitbox: Only the dense luminous core triggers death,
+        // allowing delicate weaving through the outer chartreuse aura
+        if (invulnerabilityTimer <= 0 && dist < (currentRadius * 0.62) + (fly.radius * 0.55)) {
+          triggerDefeatCinematic('particle');
+          return;
+        }
+      }
+
+      // Update Nectars (Golden food)
+      nectarSpawnCooldown += dt;
+      if (nectarSpawnCooldown > 4.5 && nectars.length < 3) {
+        nectars.push(new NectarDroplet());
+        nectarSpawnCooldown = 0;
+      }
+
+      for (let i = nectars.length - 1; i >= 0; i--) {
+        const nec = nectars[i];
+        nec.update();
+        const dist = Math.hypot(nec.x - fly.x, nec.y - fly.y);
+        if (dist < nec.radius + fly.radius + 10) {
+          sound.playNectarChime();
+          score += 600;
+          panicMeter = Math.max(0, panicMeter - 50); // Generous panic relief
+          stickyHoneyTime = 0; // Cleanses stickiness
+          invulnerabilityTimer = 0.8; // Brief 0.8s protection after nectar feeding
+          nectars.splice(i, 1);
+          setTimeout(() => { if (gameState === 'PLAYING') nectars.push(new NectarDroplet()); }, 3000);
+        }
+      }
+
+      // Defeat Trigger Check: pulled into center mouth trigger threshold
+      // Slightly reduced from 70 to 58 to provide comfortable margin
+      const fatalDeathRadius = 58;
+      if (distToTrap < fatalDeathRadius) {
+        triggerDefeatCinematic('trap');
+        return;
+      }
+
+      // Victory Condition: timer reaches 0
+      if (remainingTime <= 0) {
+        triggerVictory();
+      }
+
+      updateHUD();
+    }
+
+    let lastDefeatReason = 'trap';
+
+    function triggerDefeatCinematic(reason = 'trap') {
+      if (gameState !== 'PLAYING') return;
+      gameState = 'GAMEOVER';
+      document.body.classList.remove('is-playing'); // 커서 복원
+      lastDefeatReason = reason;
+      sound.playTrapSnapCrunch();
+      jawClampingProgress = 0;
+      screenShake = 28;
+
+      const slamStart = performance.now();
+      function runJawAnimation(time) {
+        const elapsed = (time - slamStart) / 1000;
+        jawClampingProgress = Math.min(1.0, elapsed * 2.8);
+        screenShake = Math.max(0, screenShake - 0.7);
+
+        render();
+
+        if (jawClampingProgress < 1.0) {
+          requestAnimationFrame(runJawAnimation);
+        } else {
+          showEndModal(false, lastDefeatReason);
+        }
+      }
+      requestAnimationFrame(runJawAnimation);
+    }
+
+    function triggerVictory() {
+      gameState = 'VICTORY';
+      document.body.classList.remove('is-playing'); // 커서 복원
+      sound.playVictorySong();
+      showEndModal(true);
+    }
+
+    function showEndModal(isVictory, reason = 'trap') {
+      document.body.classList.remove('is-playing'); // 커서 가시화 보장
+      const modal = document.getElementById('endModal');
+      const title = document.getElementById('endTitle');
+      const desc = document.getElementById('endDesc');
+      const badge = document.getElementById('endBadge');
+      const survivedTime = document.getElementById('endSurvivedTime');
+      const finalScore = document.getElementById('endFinalScore');
+
+      survivedTime.textContent = (30.0 - remainingTime).toFixed(1) + 's';
+      finalScore.textContent = score.toLocaleString();
+
+      if (isVictory) {
+        badge.className = 'inline-block px-3.5 py-1 rounded-full text-xs font-semibold mb-3 bg-emerald-100 text-emerald-800';
+        badge.textContent = 'SURVIVED';
+        title.textContent = '30초간의 생존 성공!';
+        desc.textContent = '파리지옥의 끈질긴 유혹과 포충낭의 소용돌이 흡인력을 이겨내고 탈출했습니다.';
+      } else {
+        badge.className = 'inline-block px-3.5 py-1 rounded-full text-xs font-semibold mb-3 bg-rose-100 text-rose-800';
+        badge.textContent = 'TRAPPED';
+        if (reason === 'particle') {
+          title.textContent = '유도 향기 입자에 피격되었습니다';
+          desc.textContent = '치명적인 농도의 냄새 입자에 닿아 마비된 후 순식간에 포식되었습니다.';
+        } else {
+          title.textContent = '포충낭 중심에 포식되었습니다';
+          desc.textContent = '발버둥은 단지 덫의 감각모를 자극해 턱을 더 잔인하게 닫히게 할 뿐이었습니다.';
+        }
+      }
+      modal.classList.remove('hidden');
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, width, height);
+
+      ctx.save();
+      // Screen shake on clamp slam
+      if (screenShake > 0) {
+        ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+      }
+
+      // 1. Botanical watercolor background
+      drawBotanicalBackground();
+
+      // 2. Central giant Venus Flytrap pod
+      const cx = width / 2;
+      const cy = height * 0.42;
+      drawRealisticCenterTrap(cx, cy);
+
+      // 3. Golden Nectar droplets
+      nectars.forEach(n => n.draw());
+
+      // 4. Concentric fragrance particles with vapor
+      scentParticles.forEach(p => p.draw());
+
+      // 5. Realistic player fly
+      drawFly();
+
+      // 6. Full-screen jaw slam cinematic
+      if (jawClampingProgress > 0) {
+        drawFullScreenJawSnapCinematic(jawClampingProgress);
+      }
+
+      ctx.restore();
+    }
+
+    function updateHUD() {
+      document.getElementById('timerText').textContent = remainingTime.toFixed(1);
+      document.getElementById('scoreText').textContent = score.toLocaleString();
+      document.getElementById('multText').textContent = 'x' + scoreMultiplier.toFixed(1);
+
+      const panicPct = Math.round(panicMeter);
+      document.getElementById('panicPercentText').textContent = panicPct + '%';
+      document.getElementById('panicProgressBar').style.width = panicPct + '%';
+
+      const warningEl = document.getElementById('stickinessWarning');
+      if (stickyHoneyTime > 0) {
+        warningEl.classList.remove('opacity-0');
+      } else {
+        warningEl.classList.add('opacity-0');
+      }
+
+      if (panicPct > 65) {
+        document.getElementById('panicProgressBar').classList.add('danger-glow');
+        document.getElementById('panicDot').classList.add('animate-ping');
+      } else {
+        document.getElementById('panicProgressBar').classList.remove('danger-glow');
+        document.getElementById('panicDot').classList.remove('animate-ping');
+      }
+    }
+
+    function gameLoop(now) {
+      const dt = Math.min((now - lastTimestamp) / 1000, 0.1);
+      lastTimestamp = now;
+
+      if (gameState === 'PLAYING') {
+        update(dt);
+        render();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function resetGame() {
+      remainingTime = 30.0;
+      totalElapsed = 0;
+      score = 0;
+      scoreMultiplier = 1.0;
+      panicMeter = 0;
+      jawClampingProgress = 0;
+      screenShake = 0;
+      stickyHoneyTime = 0;
+      invulnerabilityTimer = 0;
+
+      // Position fly safely in the lower-center clearance
+      fly.x = width / 2;
+      fly.y = height * 0.84;
+      fly.lastX = fly.x;
+      fly.lastY = fly.y;
+      mouse.x = fly.x;
+      mouse.y = fly.y;
+      mouse.prevX = fly.x;
+      mouse.prevY = fly.y;
+      mouse.speed = 0;
+      mouse.smoothSpeed = 0;
+      mouse.accel = 0;
+
+      scentParticles.length = 0;
+      for (let i = 0; i < BASE_SCENT_COUNT; i++) {
+        scentParticles.push(new ScentParticle(true));
+      }
+
+      nectars.length = 0;
+      for (let i = 0; i < 2; i++) {
+        nectars.push(new NectarDroplet());
+      }
+
+      document.getElementById('endModal').classList.add('hidden');
+      gameState = 'PLAYING';
+      document.body.classList.add('is-playing'); // 플레이 중 커서 숨김 활성화
+      sound.init();
+    }
+
+    // Modal & Control Listeners
+    document.getElementById('startGameBtn').addEventListener('click', () => {
+      document.getElementById('introModal').classList.add('hidden');
+      resetGame();
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      resetGame();
+    });
+
+    document.getElementById('guideBtn').addEventListener('click', () => {
+      document.body.classList.remove('is-playing');
+      document.getElementById('introModal').classList.remove('hidden');
+    });
+
+    const soundBtn = document.getElementById('soundToggleBtn');
+    soundBtn.addEventListener('click', () => {
+      sound.enabled = !sound.enabled;
+      soundBtn.textContent = sound.enabled ? '🔊 자연 음향 ON' : '🔇 자연 음향 OFF';
+    });
+
+    window.onload = function () {
+      fly.x = width / 2;
+      fly.y = height * 0.84;
+      render();
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>
